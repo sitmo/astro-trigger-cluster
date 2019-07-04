@@ -1,7 +1,7 @@
 import random
 
-import sys
-sys.path.append("..") # Adds higher directory to python modules path.
+#import sys
+#sys.path.append("..") # Adds higher directory to python modules path.
 from astrotf.radio_pulse import RadioPulseFilterGen
 
 N = 1000 # Number of random triggers
