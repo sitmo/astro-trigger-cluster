@@ -80,9 +80,10 @@ triggers = pd.DataFrame(
 # sort time increasing, then DM descending, then width descending
 triggers.sort_values(by=['t', 'DM', 'w'], ascending=[True, False, False], inplace=True)
 
-# Itialize the filter generator
+# Initialize the filter generator
 gen = RadioPulseFilterGen(freq_lo_mhz, freq_hi_mhz)
 
+# Print just the filtered triggers
 for filtered_trigger in gen((e.t, e.w, e.DM, e.SNR) for e in triggers.itertuples()):
     print(filtered_trigger)
 
