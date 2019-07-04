@@ -5,13 +5,13 @@ with open("README.md", "r") as fh:
 
 # This call to setup() does all the work
 setuptools.setup(
-    name="astro-trigger-cluster",
+    name="astro-trigger-filter",
     version="0.0.1",
-    description="A package for clustering triggers from radio astronomical pulse searches.",
+    description="A package for filtering triggers from radio astronomical matched template pulse searches.",
     long_description=README,
     long_description_content_type="text/markdown",
-    keywords=['astronomy','clustering'],
-    url="https://github.com/sitmo/astro-trigger-cluster",
+    keywords=['astronomy','filter'],
+    url="https://github.com/sitmo/astro-trigger-filter",
     author="Thijs van den Berg",
     author_email="thijs@sitmo.com",
     license="MIT",
@@ -23,7 +23,7 @@ setuptools.setup(
     #packages=["astro-trigger-cluster"],
     packages=setuptools.find_packages(),
     include_package_data=True,
-    install_requires=["pandas", "numpy"],
+    install_requires=[],
     entry_points={
         "console_scripts": [
             "realpython=reader.__main__:main",

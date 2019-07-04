@@ -1,1 +1,1 @@
-python -m unittest tests.test_cluster
+python -m unittest tests.test_intersect
