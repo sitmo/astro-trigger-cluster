@@ -12,7 +12,7 @@ pip install astro-trigger-filter
 
 First generate a set of random triggers, sorten on time:
 
-```
+```python
 import random
 
 N = 1000
@@ -33,7 +33,7 @@ triggers.sort(key=lambda tup: (tup[0], -tup[2]))
 
 Now filter the triggers:
 
-```
+```python
 from astrotf.radio_pulse import RadioPulseFilterGen
 
 freq_lo_mhz = 1249.8
