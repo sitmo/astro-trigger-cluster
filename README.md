@@ -8,26 +8,26 @@ A Python package for filtering radio astronomical pulse matched template searche
 pip install astro-trigger-filter
 ```
 
-## Usage
+## Basic Usage
 
-First generate a set of random triggers, sorten on time:
+Generate a set of random triggers, sorten on time:
 
 ```python
 import random
 
 N = 1000
 
-# Generate random trigger data
 start_times = [random.uniform(0.0, 1.0) for _ in range(N)]
 widths = [random.uniform(0.00, 0.01) for _ in range(N)]
 DMs = [random.uniform(0.0, 100.0) for _ in range(N)]
 SNRs = [random.uniform(5.0, 10.0) for _ in range(N)]
 
-# Reformat data into a list of tuples
 triggers = [t for t in zip(start_times, widths,DMs, SNRs)]
+```
 
-# Make sure the list is sorted on start time
-# aditional reverse sorting on DM improves the effiency
+Make sure the list is sorted on start time. Aditional reverse sorting on DM will improve the effiency.
+
+```
 triggers.sort(key=lambda tup: (tup[0], -tup[2]))
 ```
 
@@ -36,33 +36,28 @@ Now filter the triggers:
 ```python
 from astrotf.radio_pulse import RadioPulseFilterGen
 
-freq_lo_mhz = 1249.8
-freq_hi_mhz = 1549.8
+gen = RadioPulseFilterGen(freq_lo_mhz=1249.8, freq_hi_mhz=1549.8)
 
-# Itialize the filter generator
-gen = RadioPulseFilterGen(freq_lo_mhz, freq_hi_mhz)
-
-# Apply the filter to the list of triggers and print results
 for filtered_trigger in gen(triggers):
     print(filtered_trigger)
-
-print('Filtered {} triggers out of a set of {}'.format(gen.num_out, gen.num_in))
 ```
 
-## Usage with Pandas
+Print filtering statistics
+
+```
+print('Reduced the number of triggers from  {} to {}'.format(
+	gen.num_in, 
+	gen.num_out
+))
+```
+
+# Processing Pandas Dataframes
+
+Generate a pandas dataframe with random triggers:
 
 ```python
 import pandas as pd
 import random
-from astrotf.radio_pulse import RadioPulseFilterGen
-
-N = 1000 # Number of random triggers
-freq_lo_mhz = 1249.8
-freq_hi_mhz = 1549.8
-
-# Generate a Pandas Data Frame with random trigger data
-# ..or read triggers from a file:
-# triggers = pd.read_csv('triggers.txt', delim_whitespace=True)
 
 triggers = pd.DataFrame(
 	[
@@ -76,16 +71,64 @@ triggers = pd.DataFrame(
 	],
 	columns=['t', 'w', 'DM', 'SNR']
 )
+```
 
-# sort time increasing, then DM descending, then width descending
-triggers.sort_values(by=['t', 'DM', 'w'], ascending=[True, False, False], inplace=True)
+..or read a csv file from disk:
 
-# Initialize the filter generator
+
+```python
+triggers = pd.read_csv('triggers.txt', delim_whitespace=True)
+```
+
+Sort time increasing, then DM descending, then pulse width descending
+
+
+```python
+triggers.sort_values(
+	by=['t', 'DM', 'w'], 
+	ascending=[True, False, False], 
+	inplace=True
+)
+```
+
+finally filter and print the triggers:
+
+```python
 gen = RadioPulseFilterGen(freq_lo_mhz, freq_hi_mhz)
 
-# Print just the filtered triggers
-for filtered_trigger in gen((e.t, e.w, e.DM, e.SNR) for e in triggers.itertuples()):
+for filtered_trigger in gen(
+		(e.t, e.w, e.DM, e.SNR) 
+		for e in triggers.itertuples()
+	):
     print(filtered_trigger)
-
-print('Filtered {} triggers out of a set of {}'.format(gen.num_out, gen.num_in))
 ```
+
+# Storing extra data for each trigger
+
+You can add extra data for each trigger, as lomng as the first 4 elements remain *[time, width, dispersion measure, signal-to-noise ration]*. In the example below we have added a *beam_id* and *sample_id*.
+
+```python
+for filtered_trigger in gen(
+        (
+            e.time, 
+            e.w, 
+            e.DM, 
+            e.SNR, 
+            e.beam_id, 
+            e.sample_id
+        ) 
+        for e in triggers.itertuples()
+    ):
+    print(filtered_trigger)
+```
+
+# More settings
+
+buffersize=0
+: Limit the buffer size. The default setting is 0 which means an unlimited buffer size. A buffer size of 25 speeds up filtering while only generating margiuamly more false triggers.
+
+
+autoflush=True
+: Automatically flush  buffer when finished processing the input trigger. Set this to false if you want to process triggers in chunks and not flush the buffers between each chunk.
+
+

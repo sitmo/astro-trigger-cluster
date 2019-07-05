@@ -92,14 +92,14 @@ class RadioPulseFilterGen:
     def flush(self):
         while len(self.active_set) > 0:
             is_local_max_k = self.is_local_max[0]
-            ttl_k, w_k, dm_k, snr_k, ttr_k, tbr_k = self.active_set[0]
+            ttl_k, w_k, dm_k, snr_k, ttr_k, tbr_k, *rest_k = self.active_set[0]
 
             del self.active_set[0]
             del self.is_local_max[0]
 
             if is_local_max_k:
                 self.num_out += 1
-                yield ttl_k, w_k, dm_k, snr_k
+                yield (ttl_k, w_k, dm_k, snr_k, *rest_k)
 
     def __call__(self, expression):
         # Input a list of tuples: [ (t, w, dm, snr), ... ]
@@ -118,7 +118,7 @@ class RadioPulseFilterGen:
         while True:
 
             try:
-                ttl_i, w_i, dm_i, snr_i = get_next(it) #it.__next__()
+                ttl_i, w_i, dm_i, snr_i, *rest_i = get_next(it) #it.__next__()
                 self.num_in += 1
 
                 # compute template time at bottom left and right
@@ -135,9 +135,9 @@ class RadioPulseFilterGen:
                 k = 0
                 while k < len(self.active_set):
 
-                    # get the k-th trigger daat from the active set
+                    # get the k-th trigger data from the active set
                     is_local_max_k = self.is_local_max[k]
-                    ttl_k, w_k, dm_k, snr_k, ttr_k, tbr_k = self.active_set[k]
+                    ttl_k, w_k, dm_k, snr_k, ttr_k, tbr_k, *rest_k = self.active_set[k]
 
                     # handle expired triggers
                     if tbr_k < ttl_i:
@@ -149,7 +149,7 @@ class RadioPulseFilterGen:
                         # yield it if this was a local_max
                         if is_local_max_k:
                             self.num_out += 1
-                            yield ttl_k, w_k, dm_k, snr_k
+                            yield (ttl_k, w_k, dm_k, snr_k, *rest_k)
 
                         # continue to compare this trigger against the next one in the active set
                         continue
@@ -179,17 +179,17 @@ class RadioPulseFilterGen:
 
                             # pop the oldest
                             is_local_max_k = self.is_local_max[0]
-                            ttl_k, w_k, dm_k, snr_k, ttr_k, tbr_k = self.active_set[0]
+                            ttl_k, w_k, dm_k, snr_k, ttr_k, tbr_k , *rest_k= self.active_set[0]
 
                             del self.active_set[0]
                             del self.is_local_max[0]
 
                             if is_local_max_k:
                                 self.num_out += 1
-                                yield ttl_k, w_k, dm_k, snr_k
+                                yield (ttl_k, w_k, dm_k, snr_k, *rest_k)
 
                     # now add
-                    self.active_set.append((ttl_i, w_i, dm_i, snr_i, ttr_i, tbr_i))
+                    self.active_set.append((ttl_i, w_i, dm_i, snr_i, ttr_i, tbr_i, *rest_i))
                     self.is_local_max.append(is_local_max_i)
 
             except StopIteration:

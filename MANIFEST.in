@@ -1,4 +1,4 @@
 prune tests
 prune examples
-
+prune private
 
