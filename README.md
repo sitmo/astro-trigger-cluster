@@ -27,7 +27,7 @@ triggers = [t for t in zip(start_times, widths,DMs, SNRs)]
 
 Make sure the list is sorted on start time. Aditional reverse sorting on DM will improve the effiency.
 
-```
+```python
 triggers.sort(key=lambda tup: (tup[0], -tup[2]))
 ```
 
@@ -44,7 +44,7 @@ for filtered_trigger in gen(triggers):
 
 Print statistics:
 
-```
+```python
 print('Reduced the number of triggers from  {} to {}'.format(
 	gen.num_in, 
 	gen.num_out
