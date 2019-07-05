@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
 # This call to setup() does all the work
 setuptools.setup(
     name="astro-trigger-filter",
-    version="0.1.8",
+    version="0.1.9",
     description="A package for filtering triggers from radio astronomical matched template pulse searches.",
     long_description=README,
     long_description_content_type="text/markdown",

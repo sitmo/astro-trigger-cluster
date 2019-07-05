@@ -10,7 +10,7 @@ pip install astro-trigger-filter
 
 ## Basic Usage
 
-Generate a set of random triggers, sorten on time:
+Generate a set of random triggers:
 
 ```python
 import random
@@ -42,7 +42,7 @@ for filtered_trigger in gen(triggers):
     print(filtered_trigger)
 ```
 
-Print filtering statistics
+Print statistics:
 
 ```
 print('Reduced the number of triggers from  {} to {}'.format(
@@ -80,7 +80,7 @@ triggers = pd.DataFrame(
 triggers = pd.read_csv('triggers.txt', delim_whitespace=True)
 ```
 
-Sort time increasing, then DM descending, then pulse width descending
+Sort time increasing, then DM descending, then pulse-width descending:
 
 
 ```python
@@ -91,7 +91,7 @@ triggers.sort_values(
 )
 ```
 
-finally filter and print the triggers:
+Filter and print the triggers:
 
 ```python
 gen = RadioPulseFilterGen(freq_lo_mhz, freq_hi_mhz)
@@ -103,9 +103,9 @@ for filtered_trigger in gen(
     print(filtered_trigger)
 ```
 
-# Storing extra data for each trigger
+# Storing extra data along each trigger
 
-You can add extra data for each trigger, as lomng as the first 4 elements remain *[time, width, dispersion measure, signal-to-noise ration]*. In the example below we have added a *beam_id* and *sample_id*.
+You can add extra data for each trigger, as long as the first 4 elements remain *[`time, width, dispersion measure, signal-to-noise ratio`]*. In the example below we have added a `beam_id` and `sample_id`. These extra columns will show up again in the filtered output.
 
 ```python
 for filtered_trigger in gen(
@@ -124,11 +124,11 @@ for filtered_trigger in gen(
 
 # More settings
 
-buffersize=0
-: Limit the buffer size. The default setting is 0 which means an unlimited buffer size. A buffer size of 25 speeds up filtering while only generating margiuamly more false triggers.
+`buffersize=0`
+: Limit the buffer size. The default setting is 0 which means an unlimited buffer size. A buffer size of 25 speeds up filtering while only generating marginally more false triggers.
 
 
-autoflush=True
-: Automatically flush  buffer when finished processing the input trigger. Set this to false if you want to process triggers in chunks and not flush the buffers between each chunk.
+`autoflush=True`
+: Automatically flush the internal buffer when finished processing the input trigger. Set this to `false` if you want to process triggers in chunks and not flush the buffers between each chunk.
 
 
