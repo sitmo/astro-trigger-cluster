@@ -1,205 +1,220 @@
 import sys
 
 def dm_one_delay(freq_lo_mhz, freq_hi_mhz):
+    """Compute the dispersion delay of a DM = 1 signal.
+
+    :param freq_lo_mhz: Lowest frequency in the observation range.
+    :type freq_lo_mhz: float
+    :param freq_hi_mhz: Highest frequency in the observation range.
+    :type freq_hi_mhz: float
+    :return: he expected delay (in seconds) between the highest and lowest frequency of a DM=1 signal.
+    :rtype: float
+    """
     return 4.15E3 * (freq_lo_mhz**-2 - freq_hi_mhz**-2)
-
-
-def test_radio_pulse_intersection(t_i, w_i, dm_i, t_k, w_k, dm_k, dm1, tol):
-    if t_i >= t_k:
-        return (t_i <= t_k + w_k + tol) or \
-               (t_i + dm_i * dm1 <= t_k + w_k + tol + dm_k * dm1)
-    else:
-        return (t_k <= t_i + w_i + tol) or \
-               (t_k + dm_k * dm1 <= t_i + w_i + tol + dm_i * dm1)
-
-
-class RadioPulseIntersectionGen:
-
-    def __init__(self, freq_lo_mhz, freq_hi_mhz, time_tol=0.0):
-        self.tol = time_tol
-        self.dm1 = dm_one_delay(freq_lo_mhz, freq_hi_mhz)
-
-    def __call__(self, expression):
-        # Input a list of tuples: [ (t, w, dm, snr), ... ]
-
-        # A set of active trigger that started before the current one,
-        # and have not yet ended. This set is sorted on time
-        active_set = []
-
-        # Accumulate Performance Statistics: number of trigger that went in/out.
-        self.num_in = 0
-        self.num_out = 0
-        trigger_id = -1
-
-        # The main loop, we process items from an iterable object
-        it = expression.__iter__()
-        while True:
-
-            try:
-                t_i, w_i, dm_i = it.__next__()
-                self.num_in += 1
-                trigger_id += 1
-
-                # compare the current trigger against all triggers in the active set
-                k = 0
-                while k < len(active_set):
-                    t_k, w_k, dm_k, id_k, end_k = active_set[k]
-
-                    # remove expired trigger and optionally yield them if they were local_max
-                    if t_i > end_k:
-                        del active_set[k]
-                        continue
-
-                    # check if trigger_i intersects with trigger_k
-                    if (t_i <= t_k + w_k + self.tol) or (t_i + dm_i * self.dm1 <= end_k):
-                        self.num_out += 1
-                        yield trigger_id, id_k
-
-                    k += 1
-                end_i = t_i + w_i + dm_i * self.dm1 + self.tol
-                active_set.append((t_i, w_i, dm_i, trigger_id, end_i))
-
-            except StopIteration:
-                break
 
 
 class RadioPulseFilterGen:
 
-    def __init__(self, freq_lo_mhz, freq_hi_mhz, time_tol=0.0, buffersize=0, autoflush=True):
-        self.tol = time_tol
+    def __init__(self, freq_lo_mhz, freq_hi_mhz, tol=1E-4, buffer_size=256, autoflush=True, nn_size=8, max_dm_diff=40):
+        """Constructor
+
+        :param freq_lo_mhz: The lowest observation frequency.
+        :type freq_lo_mhz: float
+        :param freq_hi_mhz: The highest observation frequency.
+        :type freq_hi_mhz: float
+        :param tol: Tolerance in timing, defaults to 1E-4.
+        :type tol: float, optional
+        :param buffer_size: Maximum active set buffer size, set to zero for unlimited sizem, defaults to 256
+        :type buffer_size: int,optional
+        :param nn_size: Size of the nearest neighbourhood, defaults to 8
+        :type nn_size: int
+        :param autoflush: Automatically flush the active set after finishing.
+        :type autoflush: bool, optional
+        """
+        self.tol = tol
         self.dm1 = dm_one_delay(freq_lo_mhz, freq_hi_mhz)
 
-        self.active_set = []
-        self.is_local_max = []
-        self.buffersize = buffersize
+        self.buffer_size = buffer_size
         self.autoflush = autoflush
+        self.nn_size = nn_size
+        self.max_dm_diff = max_dm_diff
 
         # Accumulate Performance Statistics: number of trigger that went in/out.
-        self.num_in = 0
-        self.num_out = 0
-
-    def clear(self):
-        # A set of active trigger that started before the current one,
-        # and have not yet ended. This set is sorted on time
-
         self.active_set = []
-        self.is_local_max = []
-
-        # Accumulate Performance Statistics: number of trigger that went in/out.
         self.num_in = 0
         self.num_out = 0
+        self.num_evicted = 0
 
-    def flush(self):
-        while len(self.active_set) > 0:
-            is_local_max_k = self.is_local_max[0]
-            ttl_k, w_k, dm_k, snr_k, ttr_k, tbr_k, *rest_k = self.active_set[0]
+    def reset(self):
+        """Reset the statics and state of this class
 
-            del self.active_set[0]
-            del self.is_local_max[0]
+        :return: None
+        """
+        self.active_set = []
+        self.num_in = 0
+        self.num_out = 0
+        self.num_evicted = 0
 
-            if is_local_max_k:
-                self.num_out += 1
-                yield (ttl_k, w_k, dm_k, snr_k, *rest_k)
+    def unpack(self, item):
+        t0_k, w_k, dm_k, snr_k = item[:4]
+        b0_k = t0_k + dm_k * self.dm1
+        b1_k = b0_k + w_k
+        return t0_k, w_k, dm_k, snr_k, b0_k, b1_k
+        
+    def is_local_max(self, k):
+        """Tests if a trigger in the active set is a local maximum
+
+        A trigger in the active set is a local maximum if the smallest wrapping and largest contained
+        triggers both don't have a larger SNR
+
+        :param k: the index number of the trigger to test
+        :type k: int
+
+        :return: `True` if the k-th trigger in the active set is a local maximum, else `False`
+        :rtype: bool
+        """
+        t0_k, w_k, dm_k, snr_k, b0_k, b1_k = self.unpack(self.active_set[k])
+
+        # analyze elements k-1, k-2,... 0 and stop at the frist element that intersects
+        # there element will have deceasing start times, and the start times will be <=
+        i = k - 1
+        intersect_counter = 0
+        while i >= 0:
+            t0_i, w_i, dm_i, snr_i, b0_i, b1_i = self.unpack(self.active_set[i])
+
+            # we only consider triggers closeby in DM space
+            if abs(dm_k - dm_i) <= self.max_dm_diff:
+
+                if b1_i + self.tol >= b0_k:
+                    intersect_counter += 1
+                    if snr_i >= snr_k:
+                        return False  # our left neighbor is bigger
+                if intersect_counter >= self.nn_size:
+                    break  # we have found enough left neighbour
+            i -= 1
+
+        i = k + 1
+        intersect_counter = 0
+        while i < len(self.active_set):
+            t0_i, w_i, dm_i, snr_i, b0_i, b1_i = self.unpack(self.active_set[i])
+
+            if abs(dm_k - dm_i) <= self.max_dm_diff:
+                if b1_i <= b1_k + self.tol:
+                    intersect_counter += 1
+                    if snr_i >= snr_k:
+                        return False
+                if intersect_counter >= self.nn_size:
+                    break  # we have found enough right neighbour
+            i += 1
+
+        # if none of our neighbours was bigger then WE are the local max
+        return True
 
     def __call__(self, expression):
+        """Generator function that filters a list of elements
+
+        :param expression:
+        :type expression: An iterable object of elements where the first four values are (t', 'w', 'DM', 'SNR', ...)
+        :return: An iterator for a subset of the the elements.
+        """
         # Input a list of tuples: [ (t, w, dm, snr), ... ]
 
         # The main loop, we process items from an iterable object
         it = expression.__iter__()
 
         # Support both Python 2 and 3
-        if (sys.version_info > (3, 0)):
-            def get_next(it):
-                return it.__next__()
+        if sys.version_info > (3, 0):
+            def get_next(iterator):
+                return iterator.__next__()
         else:
-            def get_next(it):
-                return it.next()
+            def get_next(iterator):
+                return iterator.next()
 
         while True:
 
             try:
-                ttl_i, w_i, dm_i, snr_i, *rest_i = get_next(it) #it.__next__()
+                # Get the next item
+                item_i = get_next(it)
+                t0_i, w_i, dm_i, snr_i, b0_i, b1_i = self.unpack(item_i)
+
                 self.num_in += 1
 
-                # compute template time at bottom left and right
-                ttr_i = ttl_i + w_i + self.tol
-                tbl_i = ttl_i + dm_i * self.dm1
-                tbr_i = tbl_i + w_i + self.tol
+                # compare the current trigger against all triggers in the active set, test for expiration
+                yield_set = []
+                remove_set = []
 
-                # Unless proven otherwise we assume this trigger has no intersection
-                is_local_max_i = True
-                add_to_active_set = True
-
-                # compare the current trigger against all triggers in the active set
-                # the active set changes size inside this loop so we manage our own loop counter
-                k = 0
-                while k < len(self.active_set):
+                for k in range(len(self.active_set)):
 
                     # get the k-th trigger data from the active set
-                    is_local_max_k = self.is_local_max[k]
-                    ttl_k, w_k, dm_k, snr_k, ttr_k, tbr_k, *rest_k = self.active_set[k]
+                    item_k = self.active_set[k]
+                    t0_k, w_k, dm_k, snr_k, b0_k, b1_k = self.unpack(item_k)
 
-                    # handle expired triggers
-                    if tbr_k < ttl_i:
+                    # Check if trigger #k has expired. If so: remove and possibly yield
+                    if b1_k < t0_i:
+                        remove_set.append(k)
 
-                        # remove expired trigger from the active set
-                        del self.active_set[k]
-                        del self.is_local_max[k]
+                        if self.is_local_max(k):
+                            yield_set.append(k)
 
-                        # yield it if this was a local_max
-                        if is_local_max_k:
+                # yield expired local maxima
+                for k in yield_set:
+                    self.num_out += 1
+                    yield self.active_set[k]
+
+                # remove expired triggers
+                for k in remove_set[::-1]:
+                    del self.active_set[k]
+
+                # make sure we don't have too many items in the buffer
+                if self.buffer_size > 0:  # do we have a buffer_size limit?
+
+                    while len(self.active_set) >= self.buffer_size:  # while not enough room
+                        item_0 = self.active_set[0]
+                        to_be_yielded = self.is_local_max(0)
+
+                        self.num_evicted += 1
+                        del self.active_set[0]
+
+                        if to_be_yielded:
                             self.num_out += 1
-                            yield (ttl_k, w_k, dm_k, snr_k, *rest_k)
+                            yield item_0
 
-                        # continue to compare this trigger against the next one in the active set
-                        continue
-
-                    # analyse what to do if triggerst intersect
-                    if (ttl_i <= ttr_k) or (tbl_i <= tbr_k):
-
-                        # do we have the highest S/R ?
-                        if snr_i > snr_k:
-                            self.is_local_max[k] = False
-
-                        # do we have the smallest S/R ?
-                        else:
-                            is_local_max_i = False
-                            contained = (tbr_i <= tbr_k)
-
-                            # Are we completely covered by this higher S/R trigger?
-                            if contained:
-                                add_to_active_set = False
-                    k += 1
-
-                if add_to_active_set:
-
-                    # do we need to first make room?
-                    if self.buffersize > 0:
-                        while len(self.active_set) >= self.buffersize:
-
-                            # pop the oldest
-                            is_local_max_k = self.is_local_max[0]
-                            ttl_k, w_k, dm_k, snr_k, ttr_k, tbr_k , *rest_k= self.active_set[0]
-
-                            del self.active_set[0]
-                            del self.is_local_max[0]
-
-                            if is_local_max_k:
-                                self.num_out += 1
-                                yield (ttl_k, w_k, dm_k, snr_k, *rest_k)
-
-                    # now add
-                    self.active_set.append((ttl_i, w_i, dm_i, snr_i, ttr_i, tbr_i, *rest_i))
-                    self.is_local_max.append(is_local_max_i)
+                # After removing expired elements and from the active set, we join the set
+                self.active_set.append(item_i)
 
             except StopIteration:
+
                 # we are done processing triggers, flush the active set
                 if self.autoflush:
-                    self.flush()
+
+                    yield_set = []
+                    for k in range(len(self.active_set)):
+                        if self.is_local_max(k):
+                            yield_set.append(k)
+                    for k in yield_set:
+                        self.num_out += 1
+                        yield self.active_set[k]
                 break
 
 
 def radio_pulse_polygon(t0, w, dm, num_steps=100, freq_lo=1249.8046875, freq_hi=1549.8046875):
+    """Generate a polygon of a pulse.
+
+    :param t0: Start of the pulse at the top frequency
+    :type t0: float
+    :param w:  Width of the pulse
+    :type w: float
+    :param dm: Dispersion measure
+    :type dm: float
+    :param num_steps: Number of ine segments
+    :type num_steps: int
+    :param freq_lo: Lowest frequency
+    :type freq_lo: float
+    :param freq_hi: Highest frequency
+    :type freq_hi: float
+    :return: A list of vertices of the pulse [ (x0,y0), (x1,x1), ..
+    :rtype dm: list of 2d coordinate tuples
+    """
 
     f_step = (freq_hi - freq_lo) / (num_steps - 1)
 

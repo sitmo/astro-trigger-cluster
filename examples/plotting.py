@@ -6,7 +6,7 @@ from graphviz import Graph
 
 # Import TriggerFilter class
 sys.path.append("..") # Adds higher directory to python modules path.
-from astrotf.radio_pulse import radio_pulse_polygon, RadioPulseIntersectionGen
+from astrotf.radio_pulse import radio_pulse_polygon
 
 
 # ----------------------------------------------------------------------------------------------------
