@@ -7,13 +7,14 @@ def dm_one_delay(freq_lo_mhz, freq_hi_mhz):
     :type freq_lo_mhz: float
     :param freq_hi_mhz: Highest frequency in the observation range.
     :type freq_hi_mhz: float
-    :return: he expected delay (in seconds) between the highest and lowest frequency of a DM=1 signal.
+    :return: The expected delay (in seconds) between the highest and lowest frequency of a DM=1 signal.
     :rtype: float
     """
     return 4.15E3 * (freq_lo_mhz**-2 - freq_hi_mhz**-2)
 
 
-class RadioPulseFilterGen:
+
+class FilterEngine:
 
     def __init__(self, freq_lo_mhz, freq_hi_mhz, tol=1E-4, buffer_size=256, autoflush=True, nn_size=8, max_dm_diff=40):
         """Constructor
@@ -32,6 +33,8 @@ class RadioPulseFilterGen:
         :type autoflush: bool, optional
         """
         self.tol = tol
+        self.freq_lo_mhz = freq_lo_mhz
+        self.freq_hi_mhz = freq_hi_mhz
         self.dm1 = dm_one_delay(freq_lo_mhz, freq_hi_mhz)
 
         self.buffer_size = buffer_size
@@ -44,6 +47,74 @@ class RadioPulseFilterGen:
         self.num_in = 0
         self.num_out = 0
         self.num_evicted = 0
+
+
+    def sort(self, data, colnames=None):
+        """sort a list of triggers.
+
+        :param data: A list of tuples (t0, width, dm, ..) or a pandas DataFrame
+        :type data: list of tuples or a pandas DataFrame
+        :param colnames: an optional list of column names to sort the pandas DataFrame on: either ['time', 'pulse_end'] or ['time', 'width', 'dm']
+        :type colnames: list of strings
+        :return: No return, sorts in-place.
+        """
+        print(type(data))
+        if isinstance(data, (list,)):
+            data.sort(key=lambda x: x[0] + x[1] + self.dm1 * x[2])
+            return
+
+        if str(type(data)) == "<class 'pandas.core.frame.DataFrame'>":
+            assert(isinstance(colnames, (list,)), 'Expecting a list of colnames for the dataframe')
+
+            if len(colnames) == 2:
+                data.sort_values(by=colnames, ascending=[True, False], inplace=True)
+                return
+
+            if len(colnames) == 3:
+                data['pulse_end'] = data[colnames[0]] + data[colnames[1]] + self.dm1 * data[colnames[2]]
+                data.sort_values(by=[colnames[0], 'pulse_end'], ascending=[True, False], inplace=True)
+                return
+
+            if len(colnames) == 4:
+                data[colnames[3]] = data[colnames[0]] + data[colnames[1]] + self.dm1 * data[colnames[2]]
+                data.sort_values(by=[colnames[0], colnames[3]], ascending=[True, False], inplace=True)
+                return
+
+            raise ValueError('Sorting failed, wrong number of columns names. Expected either 2,3 or 4 column names.')
+
+        raise ValueError('Sorting failed, unknown data type. Expected either a list of tuples or a pandas DataFrame.')
+
+    def polygon(self, t0, w, dm, num_steps=100):
+        """Generate a list of vertices for plotting a pulse shape polygon.
+
+        :param t0: Start of the pulse at the top frequency
+        :type t0: float
+        :param w:  Width of the pulse
+        :type w: float
+        :param dm: Dispersion measure
+        :type dm: float
+        :param num_steps: Number of ine segments
+        :type num_steps: int
+        :param freq_lo: Lowest frequency
+        :type freq_lo: float
+        :param freq_hi: Highest frequency
+        :type freq_hi: float
+        :return: A list of vertices of the pulse [ (x0,y0), (x1,x1), ..
+        :rtype: List of 2d-coordinate tuples
+        """
+
+        f_step = (self.freq_hi_mhz - self.freq_lo_mhz) / (num_steps - 1)
+
+        v0 = []
+        v1 = []
+
+        for i in range(num_steps):
+            f_i = self.freq_hi_mhz - i * f_step
+            delay_i = dm_one_delay(f_i, self.freq_hi_mhz) * dm
+            v0.append((t0 + delay_i, f_i))
+            v1.append((t0 + delay_i + w, f_i))
+
+        return v0 + v1[::-1]
 
     def reset(self):
         """Reset the statics and state of this class
@@ -110,7 +181,7 @@ class RadioPulseFilterGen:
         # if none of our neighbours was bigger then WE are the local max
         return True
 
-    def __call__(self, expression):
+    def filter(self, expression):
         """Generator function that filters a list of elements
 
         :param expression:
@@ -197,34 +268,4 @@ class RadioPulseFilterGen:
                 break
 
 
-def radio_pulse_polygon(t0, w, dm, num_steps=100, freq_lo=1249.8046875, freq_hi=1549.8046875):
-    """Generate a polygon of a pulse.
 
-    :param t0: Start of the pulse at the top frequency
-    :type t0: float
-    :param w:  Width of the pulse
-    :type w: float
-    :param dm: Dispersion measure
-    :type dm: float
-    :param num_steps: Number of ine segments
-    :type num_steps: int
-    :param freq_lo: Lowest frequency
-    :type freq_lo: float
-    :param freq_hi: Highest frequency
-    :type freq_hi: float
-    :return: A list of vertices of the pulse [ (x0,y0), (x1,x1), ..
-    :rtype dm: list of 2d coordinate tuples
-    """
-
-    f_step = (freq_hi - freq_lo) / (num_steps - 1)
-
-    v0 = []
-    v1 = []
-
-    for i in range(num_steps):
-        f_i = freq_hi - i * f_step
-        delay_i = dm_one_delay(f_i, freq_hi) * dm
-        v0.append((t0 + delay_i, f_i))
-        v1.append((t0 + delay_i + w, f_i))
-
-    return v0 + v1[::-1]
