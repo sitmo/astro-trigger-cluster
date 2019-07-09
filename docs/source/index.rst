@@ -3,6 +3,13 @@ Astronomical Trigger Filtering
 
 This package provides algorithms for reducing the number of superfluous triggers that occur in matched template searches pipelines use in astronomy.
 
+Installation
+-------------
+
+.. code-block:: python
+
+   pip install astro-trigger-filter
+
 
 .. figure:: _static/radio_pulse_template.png
     :align: center
