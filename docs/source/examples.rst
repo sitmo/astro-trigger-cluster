@@ -105,6 +105,31 @@ Output::
     (0.9995, 0.0001, 94.495, 5.4295, 49)
 
 
+
+Batches processing
+^^^^^^^^^^^^^^^^^^
+The FilterEngine uses an internal buffer which gets automatically flushed after there are no more triggers to process.
+If you want to process triggers in chunk then you can do so:
+
+.. code-block:: python
+
+    eng = FilterEngine(
+        freq_lo_mhz=1249.8,
+        freq_hi_mhz=1549.8,
+        autoflusk=False
+        )
+
+    for data in data_chunks:
+
+        for filtered_trigger in eng.filter(
+                (e.t, e.w, e.DM, e.SNR, e.counter)
+                for e in data.itertuples()
+            ):
+            print(filtered_trigger)
+
+    eng.flush()
+
+
 Statistics
 ^^^^^^^^^^
 
