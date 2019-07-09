@@ -106,7 +106,7 @@ Output::
 
 
 
-Batches processing
+Batch processing
 ^^^^^^^^^^^^^^^^^^
 The FilterEngine uses an internal buffer which gets automatically flushed after there are no more triggers to process.
 If you want to process triggers in chunk then you can do so:
