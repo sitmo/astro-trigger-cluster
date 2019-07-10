@@ -58,7 +58,6 @@ class FilterEngine:
         :type colnames: list of strings
         :return: No return, sorts in-place.
         """
-        print(type(data))
         if isinstance(data, (list,)):
             data.sort(key=lambda x: x[0] + x[1] + self.dm1 * x[2])
             return
