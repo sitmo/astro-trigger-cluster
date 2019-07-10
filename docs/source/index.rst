@@ -11,6 +11,15 @@ Installation
    pip install astro-trigger-filter
 
 
+Command line tool
+--------------------
+
+The `ambertf` command line tool process *Amber* formatter trigger files.
+To combine and filter all trigger files matching `CB??.trigger` run::
+
+   $> ambertf CB??.trigger
+
+
 .. figure:: _static/radio_pulse_template.png
     :align: center
 
