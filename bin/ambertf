@@ -5,6 +5,8 @@ import glob
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import sys
+
 from astrotf.radio import FilterEngine
 
 # ---------------------------------------------------------------------------------
@@ -27,6 +29,14 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "-r",
+    "--ref",
+    nargs='?',
+    type=str,
+    help="Reference trigger file for plotting"
+)
+
+parser.add_argument(
     "-o",
     "--output",
     nargs='?',
@@ -41,6 +51,69 @@ parser.add_argument(
     type=str,
     help="Optional plot filename."
 )
+
+parser.add_argument(
+    "-pt0",
+    "--plot_t0",
+    nargs='?',
+    type=float,
+    help="Start plot time."
+)
+
+parser.add_argument(
+    "-pt1",
+    "--plot_t1",
+    nargs='?',
+    type=float,
+    help="End plot time."
+)
+
+
+parser.add_argument(
+    "-fm0",
+    "--filter_dm0",
+    nargs='?',
+    type=float,
+    const=20.0,
+    default=20.0,
+    help="lower dm bound, values below will be ignored."
+)
+
+parser.add_argument(
+    "-pdm0",
+    "--plot_dm0",
+    nargs='?',
+    type=float,
+    help="lower dm bound in plot."
+)
+
+
+parser.add_argument(
+    "-pdm1",
+    "--plot_dm1",
+    nargs='?',
+    type=float,
+    help="Upper dm bound in plot."
+)
+
+
+parser.add_argument(
+    "-pdml",
+    "--plot_dmlog",
+    help="Use logarithmic dm axis.",
+    action="store_true"
+)
+
+parser.add_argument(
+    "-ps",
+    "--plot_size",
+    nargs='?',
+    type=float,
+    const=1.0,
+    default=1.0,
+    help="Plot marker size factor."
+)
+
 parser.add_argument(
     "-fh",
     "--freq_hi_mhz",
@@ -175,7 +248,7 @@ for w in widths:
     if args.verbose:
         print('Processing: {} triggers of width {}'.format(dataw.shape[0], w))
 
-    eng = FilterEngine(args.freq_lo_mhz, args.freq_hi_mhz, buffer_size=512, nn_size=32, tol=1E-4)
+    eng = FilterEngine(args.freq_lo_mhz, args.freq_hi_mhz, buffer_size=512, nn_size=32, tol=1E-3)
 
     eng.sort(dataw, ['time', 'w', 'dm'])
 
@@ -205,7 +278,7 @@ if args.verbose:
 if args.verbose:
     print('Processing merged triggers...')
 
-eng = FilterEngine(args.freq_lo_mhz, args.freq_hi_mhz, buffer_size=512, nn_size=16, tol=1E-4)
+eng = FilterEngine(args.freq_lo_mhz, args.freq_hi_mhz, buffer_size=512, nn_size=64, tol=1E-3)
 
 eng.sort(output, ['time', 'w', 'dm'])
 
@@ -222,7 +295,12 @@ output_round2 = pd.DataFrame(
 if args.verbose:
     print('Finished processing:', eng.num_in, "->", eng.num_out)
 
-
+# -----------------------------------------------------------------------------------------------------
+# Filter output
+# -----------------------------------------------------------------------------------------------------
+if args.filter_dm0:
+    # lower dm filter
+    output_round2 = output_round2.loc[output_round2.dm >= args.filter_dm0]
 # -----------------------------------------------------------------------------------------------------
 # Write output results
 # -----------------------------------------------------------------------------------------------------
@@ -255,23 +333,63 @@ else:
 # make a plot
 # -----------------------------------------------------------------------------------------------------
 if args.plot:
+
     if args.verbose:
         print("Generating plots.")
 
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(22, 14), sharex=True, sharey=True)
-    ax1.scatter(data.time, data.dm, s=20, lw=0,  c='k')
-    ax2.scatter(output_round2.time, output_round2.dm, s=20, lw=0, c='k')
-    ax1.set_ylabel('DM')
-    ax1.set_xlabel('time (s)')
+    if args.ref:
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(16, 14), sharex=True, sharey=True)
+    else:
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(16, 10), sharex=True, sharey=True)
 
-    ax1.set_title('input {}'.format(data.shape[0]))
-    ax2.set_title('output {}'.format(output_round2.shape[0]))
+    ax1.scatter(
+        data.time,
+        data.dm,
+        s=args.plot_size * 0.2 * np.minimum(data.snr, 30)**2,
+        lw=1,
+        edgecolor='k',
+        c='r'
+    )
+    ax1.set_title('input {}'.format(data.shape[0]), fontsize=16)
 
-    ax1.set_yscale('log')
-    ax2.set_yscale('log')
+    ax2.scatter(
+        output_round2.time,
+        output_round2.dm,
+        s=args.plot_size * 0.2 * np.minimum(output_round2.snr, 30)**2,
+        lw=1,
+        edgecolor='k',
+        c='r'
+    )
+    ax2.set_title('output {}'.format(output_round2.shape[0]), fontsize=16)
+    if args.ref:
+        ref_data = read_trigger_file(args.ref, args.verbose)
+        ax3.scatter(
+            ref_data.time,
+            ref_data.dm,
+            s=args.plot_size * 0.2 * np.minimum(ref_data.snr, 30) ** 2,
+            lw=1,
+            edgecolor='k',
+            c='r'
+        )
+        ax3.set_title('reference {}'.format(ref_data.shape[0]), fontsize=16)
 
-    ax1.set_ylim(0.1, 4000)
-    ax2.set_ylim(0.1, 4000)
+
+    for ax in fig.axes:
+        ax.grid()
+        ax.set_ylabel('DM', fontsize=16)
+        ax.set_xlabel('time (s)', fontsize=16)
+
+    if args.plot_dmlog:
+        ax1.set_yscale('log')
+        ax2.set_yscale('log')
+    if args.plot_t0:
+        plt.gca().set_xlim(left=args.plot_t0)
+    if args.plot_t1:
+        plt.gca().set_xlim(right=args.plot_t1)
+    if args.plot_dm0:
+        plt.gca().set_ylim(bottom=args.plot_dm0)
+    if args.plot_dm1:
+        plt.gca().set_ylim(top=args.plot_dm1)
 
     plt.tight_layout()
     plt.savefig(args.plot)

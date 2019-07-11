@@ -17,7 +17,7 @@ Command line tool
 The `ambertf` command line tool process *Amber* formatter trigger files.
 To combine and filter all trigger files matching `CB??.trigger` run::
 
-   shell> ambertf -i CM??.trigger -o output.txt -v
+   shell> ambertf -i "CM??.trigger" -o output.txt -v
 
 
 .. figure:: _static/radio_pulse_template.png

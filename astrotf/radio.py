@@ -13,10 +13,9 @@ def dm_one_delay(freq_lo_mhz, freq_hi_mhz):
     return 4.15E3 * (freq_lo_mhz**-2 - freq_hi_mhz**-2)
 
 
-
 class FilterEngine:
 
-    def __init__(self, freq_lo_mhz, freq_hi_mhz, tol=1E-4, buffer_size=256, autoflush=True, nn_size=8, max_dm_diff=40):
+    def __init__(self, freq_lo_mhz, freq_hi_mhz, tol=1E-4, buffer_size=256, autoflush=True, nn_size=16, max_dm_diff=0.6):
         """Constructor
 
         :param freq_lo_mhz: The lowest observation frequency.
@@ -29,6 +28,8 @@ class FilterEngine:
         :type buffer_size: int,optional
         :param nn_size: Size of the nearest neighbourhood, defaults to 8
         :type nn_size: int
+        :param max_dm_diff: Max fractional difference between DMs linked together, defaults to 0.6 (60%)
+        :type max_dm_diff: float optional
         :param autoflush: Automatically flush the active set after finishing.
         :type autoflush: bool, optional
         """
@@ -48,22 +49,22 @@ class FilterEngine:
         self.num_out = 0
         self.num_evicted = 0
 
-
     def sort(self, data, colnames=None):
         """sort a list of triggers.
 
         :param data: A list of tuples (t0, width, dm, ..) or a pandas DataFrame
         :type data: list of tuples or a pandas DataFrame
-        :param colnames: an optional list of column names to sort the pandas DataFrame on: either ['time', 'pulse_end'] or ['time', 'width', 'dm']
+        :param colnames:list of columns to sort on: either ['time', 'pulse_end'] or ['time', 'width', 'dm']
         :type colnames: list of strings
         :return: No return, sorts in-place.
         """
-        if isinstance(data, (list,)):
+        if isinstance(data, list):
             data.sort(key=lambda x: x[0] + x[1] + self.dm1 * x[2])
             return
 
+
         if str(type(data)) == "<class 'pandas.core.frame.DataFrame'>":
-            assert(isinstance(colnames, (list,)), 'Expecting a list of colnames for the dataframe')
+            assert isinstance(colnames, list), 'Expecting a list of colnames for the dataframe'
 
             if len(colnames) == 2:
                 data.sort_values(by=colnames, ascending=[True, False], inplace=True)
@@ -94,10 +95,6 @@ class FilterEngine:
         :type dm: float
         :param num_steps: Number of ine segments
         :type num_steps: int
-        :param freq_lo: Lowest frequency
-        :type freq_lo: float
-        :param freq_hi: Highest frequency
-        :type freq_hi: float
         :return: A list of vertices of the pulse [ (x0,y0), (x1,x1), ..
         :rtype: List of 2d-coordinate tuples
         """
@@ -153,7 +150,7 @@ class FilterEngine:
             t0_i, w_i, dm_i, snr_i, b0_i, b1_i = self.unpack(self.active_set[i])
 
             # we only consider triggers closeby in DM space
-            if abs(dm_k - dm_i) <= self.max_dm_diff:
+            if max(dm_k, dm_i, 10) / max(min(dm_k, dm_i), 10) < 1.0 + self.max_dm_diff:
 
                 if b1_i + self.tol >= b0_k:
                     intersect_counter += 1
@@ -168,7 +165,7 @@ class FilterEngine:
         while i < len(self.active_set):
             t0_i, w_i, dm_i, snr_i, b0_i, b1_i = self.unpack(self.active_set[i])
 
-            if abs(dm_k - dm_i) <= self.max_dm_diff:
+            if max(dm_k, dm_i, 10) / max(min(dm_k, dm_i), 10) < 1.0 + self.max_dm_diff:
                 if b1_i <= b1_k + self.tol:
                     intersect_counter += 1
                     if snr_i >= snr_k:
